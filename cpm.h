@@ -39,6 +39,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define KNRM "\x1B[0m"  // NORMAL COLOR
 
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -159,7 +160,7 @@ bool cmp_modtime(const char *file1, const char *file2) {
   }
   return oneInfo.st_mtime > twoInfo.st_mtime;
 }
-
+#define GETFILENAME(name) (strrchr(name, '/') ? strrchr(name, '/') + 1 : name)
 #define CPM_REBUILD_SELF(argv)                                                 \
                                                                                \
   if (cmp_modtime(__FILE__, argv[0])) {                                        \
@@ -169,6 +170,20 @@ bool cmp_modtime(const char *file1, const char *file2) {
     cpm_cmd_append(&self_changename_, argv[0]);                                \
     string_append(&self_changename_, argv[0]);                                 \
     string_append(&self_changename_, ".old");                                  \
+    cpm_log(CPM_WARNING, "changing current executable to old\n");              \
+    cpm_cmd_exec(self_changename_);                                            \
+                                                                               \
+    cpm_cmd_append(&self_rebuild_, "cc");                                      \
+    cpm_cmd_append(&self_rebuild_, __FILE__);                                  \
+    cpm_cmd_append(&self_rebuild_, "-o", GETFILENAME(argv[0]));                \
+    cpm_log(CPM_WARNING, "rebuilding the builder\n");                          \
+    cpm_cmd_exec(self_rebuild_);                                               \
+    cpm_log(CPM_INFO, "running new builder!\n");                               \
+    if (system(argv[0])) {                                                     \
+      cpm_log(CPM_ERROR, "failed to run new builder!\n");                      \
+      exit(1);                                                                 \
+    }                                                                          \
+    exit(0);                                                                   \
   }
 
 #endif
