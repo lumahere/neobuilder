@@ -1,43 +1,46 @@
 /*
- *
+MIT License
 
-Copyright 2024 Nathanael Frederic Adrean
+Copyright (c) 2024 Nathanael Adrean
 
-Redistribution and use in source and binary forms, with or without modification,
-are permitted provided that the following conditions are met:
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-1. Redistributions of source code must retain the above copyright notice, this
-list of conditions and the following disclaimer.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-2. Redistributions in binary form must reproduce the above copyright notice,
-this list of conditions and the following disclaimer in the documentation and/or
-other materials provided with the distribution.
-
-3. Neither the name of the copyright holder nor the names of its contributors
-may be used to endorse or promote products derived from this software without
-specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND
-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
-ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
-ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
  * */
 
 #ifndef H_NCPM_BUILDER
 #define H_NCPM_BUILDER
+// Version Control
+#define CPM_MAJOR_VERSION 0
+#define CPM_MINOR_VERSON 1
+#define CPM_PATCH_VERSION 2
+// 0.1.2
 
-#include <time.h>
+#define UNIMPLEMENTED{ \
+  cpm_log(CPM_ERROR, "function is not implemented yet O^O; at line %s\n", __LINE__);\
+  exit(EXIT_FAILURE);}\
+
+
 #define KERR "\x1B[31m" // RED
 #define KWAR "\x1B[33m" // YELLOW
 #define KMSG "\x1B[35m" // MAGENTA
 #define KNRM "\x1B[0m"  // NORMAL COLOR
 
+#include <time.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -50,6 +53,11 @@ typedef struct String {
   size_t cap;
   char *str;
 } String;
+
+typedef struct MemFile {
+  size_t size;
+  void *data;
+} MemFile;
 
 typedef enum loglvl {
   CPM_INFO,
@@ -185,5 +193,58 @@ bool cmp_modtime(const char *file1, const char *file2) {
     }                                                                          \
     exit(0);                                                                   \
   }
+
+#define CLI_OPTIONS_SIZE 2
+const char* cli_options[] = {"build", "config"};
+
+//FILE OPS
+bool file_exists(const char* file_path){
+  FILE* file;
+  file = fopen(file_path, "r");
+  if (!file){
+    return false;
+  }
+  fclose(file);
+  return 1;
+}
+
+MemFile load_file_to_mem(const char* file_path){
+  MemFile file = {0};
+  FILE* actfile =  fopen(file_path, "rb");
+  if( actfile != 0){
+    fseek(actfile, 0, SEEK_END);
+    file.size = ftell(actfile);
+    fseek(actfile, 0, SEEK_SET);
+  } else {
+    cpm_log(CPM_ERROR, "Failed to read and load %s to memory, exiting with exit failure\n", file_path);
+    perror("Errno at load_file_to_mem: ");
+    exit(EXIT_FAILURE);
+  }
+  void* memoryfile = malloc(file.size);
+  fread(memoryfile, sizeof(char), file.size, actfile);
+  file.data = memoryfile;
+  fclose(actfile);
+  return file;
+}
+
+//CONFIG PARSE
+
+void cli_entry(int argc, char** argv){
+  if (argc < 2){
+    cpm_log(CPM_ERROR, "not enough args\n");
+    printf("usage example:\n%s [CMDS]\navailble commands:\n", argv[0]);
+    for (int i = 0; i < CLI_OPTIONS_SIZE; i++){
+      printf("%s\n", cli_options[i]);
+    }
+    exit(EXIT_FAILURE);
+  }
+  
+  if(!strcmp(argv[1], cli_options[1])){
+
+  }
+   
+}
+#define CPM_CLI(argc, argv) cli_entry(argc, argv)
+
 
 #endif
