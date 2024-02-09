@@ -30,6 +30,8 @@ SOFTWARE.
 #define CPM_PATCH_VERSION 2
 // 0.1.2
 
+#define DEFAULT_COMPILER "cc"
+
 #define UNIMPLEMENTED{ \
   cpm_log(CPM_ERROR, "function is not implemented yet O^O; at line %s\n", __LINE__);\
   exit(EXIT_FAILURE);}\
@@ -153,7 +155,7 @@ void cpm_log(Loglevel lvl, const char *fmt, ...) {
   string_free(msg);
 }
 
-// compares file1 against file2
+// compares file1 against file2 returning true if file1 is newer than file2
 bool cmp_modtime(const char *file1, const char *file2) {
   struct stat oneInfo, twoInfo;
   if (-1 == stat(file1, &oneInfo)) {
@@ -168,6 +170,7 @@ bool cmp_modtime(const char *file1, const char *file2) {
   }
   return oneInfo.st_mtime > twoInfo.st_mtime;
 }
+
 #define GETFILENAME(name) (strrchr(name, '/') ? strrchr(name, '/') + 1 : name)
 #define CPM_REBUILD_SELF(argv)                                                 \
                                                                                \
@@ -181,7 +184,7 @@ bool cmp_modtime(const char *file1, const char *file2) {
     cpm_log(CPM_WARNING, "changing current executable to old\n");              \
     cpm_cmd_exec(self_changename_);                                            \
                                                                                \
-    cpm_cmd_append(&self_rebuild_, "cc");                                      \
+    cpm_cmd_append(&self_rebuild_, DEFAULT_COMPILER);                                  \
     cpm_cmd_append(&self_rebuild_, __FILE__);                                  \
     cpm_cmd_append(&self_rebuild_, "-o", GETFILENAME(argv[0]));                \
     cpm_log(CPM_WARNING, "rebuilding the builder\n");                          \
@@ -193,9 +196,6 @@ bool cmp_modtime(const char *file1, const char *file2) {
     }                                                                          \
     exit(0);                                                                   \
   }
-
-#define CLI_OPTIONS_SIZE 2
-const char* cli_options[] = {"build", "config"};
 
 //FILE OPS
 bool file_exists(const char* file_path){
@@ -227,24 +227,19 @@ MemFile load_file_to_mem(const char* file_path){
   return file;
 }
 
-//CONFIG PARSE
-
-void cli_entry(int argc, char** argv){
-  if (argc < 2){
-    cpm_log(CPM_ERROR, "not enough args\n");
-    printf("usage example:\n%s [CMDS]\navailble commands:\n", argv[0]);
-    for (int i = 0; i < CLI_OPTIONS_SIZE; i++){
-      printf("%s\n", cli_options[i]);
-    }
-    exit(EXIT_FAILURE);
+//only run compilation if the src is newer than obj
+void cpm_recompile(const char* srcpath, const char* objpath, Cmd compilation_cmd){
+  if(!file_exists(objpath)){
+    cpm_log(CPM_INFO, "%s", compilation_cmd.str);
+    cpm_cmd_exec(compilation_cmd);
   }
-  
-  if(!strcmp(argv[1], cli_options[1])){
-
+  else if(cmp_modtime(srcpath, objpath)){
+    cpm_log(CPM_INFO, "recompiling %s => %s\n", srcpath, compilation_cmd.str);
+    cpm_cmd_exec(compilation_cmd);
+  } else {
+    cpm_log(CPM_INFO, "Skipping compilation of %s\n", srcpath);
   }
-   
 }
-#define CPM_CLI(argc, argv) cli_entry(argc, argv)
 
 
 #endif
