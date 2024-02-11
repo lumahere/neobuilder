@@ -25,16 +25,18 @@ SOFTWARE.
 #ifndef H_NCPM_BUILDER
 #define H_NCPM_BUILDER
 // Version Control
-#define CPM_MAJOR_VERSION 0
-#define CPM_MINOR_VERSON 1
-#define CPM_PATCH_VERSION 2
 // 0.1.2
+#define CPM_MAJOR_VERSION 0
+#define CPM_MINOR_VERSON 2
+#define CPM_PATCH_VERSION 1
+
 
 #define DEFAULT_COMPILER "cc"
+#define DEFAULT_CPM_PATH "."
 
-#define UNIMPLEMENTED{ \
+#define UNIMPLEMENTED { \
   cpm_log(CPM_ERROR, "function is not implemented yet O^O; at line %s\n", __LINE__);\
-  exit(EXIT_FAILURE);}\
+  exit(EXIT_FAILURE); }\
 
 
 #define KERR "\x1B[31m" // RED
@@ -49,6 +51,8 @@ SOFTWARE.
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 typedef struct String {
   size_t size;
@@ -227,19 +231,125 @@ MemFile load_file_to_mem(const char* file_path){
   return file;
 }
 
-//only run compilation if the src is newer than obj
-void cpm_recompile(const char* srcpath, const char* objpath, Cmd compilation_cmd){
-  if(!file_exists(objpath)){
+// how to parse
+// typical cmd: clang PATH -o PATH {FLAGS}
+bool cpm_compile(Cmd compilation_cmd){
+  size_t arrcap = 5;
+  size_t arrcount = 0;
+  char** strarr = (char**) calloc(arrcap, sizeof(char*) );
+  char* srcpy = strdup(compilation_cmd.str);
+  char* token = strtok(srcpy, " ");
+  while(token){
+    if(arrcount == arrcap){
+      arrcap *= 2;
+      strarr = realloc(strarr, arrcap * sizeof(char*));
+    }
+      ++arrcount;
+      strarr[arrcount - 1] = strdup(token);
+      token = strtok(NULL, " ");
+  }
+  free(token);
+  free(srcpy);
+
+   char* out = 0;
+   char* in = 0;
+  // PURPOSE: DO THIS IN ONE LOOP "Curiosa to demiso"
+  for (int i = 0; i < arrcount; ++i){
+    // Check if the current str is -o and after that it means the output path
+    if(strcmp(strarr[i], "-o") == 0){
+      i++; // Skip an iteration to output path
+      out = strdup(strarr[i]);
+    }
+    if(strstr(strarr[i], ".c")){
+      in = strdup(strarr[i]);
+    }
+  }
+
+  bool res;
+  if(!file_exists(out)){
     cpm_log(CPM_INFO, "%s", compilation_cmd.str);
     cpm_cmd_exec(compilation_cmd);
+    res = true;
   }
-  else if(cmp_modtime(srcpath, objpath)){
-    cpm_log(CPM_INFO, "recompiling %s => %s\n", srcpath, compilation_cmd.str);
+  else if(cmp_modtime(in, out)){
+    cpm_log(CPM_INFO, "recompiling %s => %s\n", in, compilation_cmd.str);
     cpm_cmd_exec(compilation_cmd);
+    res = true;
   } else {
-    cpm_log(CPM_INFO, "Skipping compilation of %s\n", srcpath);
+    cpm_log(CPM_INFO, "Skipping compilation of %s\n", in);
+    free(compilation_cmd.str);
+    res = false;
   }
+  
+  free(in);
+  free(out);
+  for (int i = 0; i < arrcap; i++){
+    free(strarr[i]);
+  }
+  free(strarr);
+  return res;
 }
 
+// RETURNS PID OF CHILD
+int cpm_compile_async(Cmd compile_command){
+  int child = fork();
+  if(child == -1){
+    cpm_log(CPM_WARNING, "Could not fork process for async compilation, defaulting to non-async compilation\n");
+    perror("At fork: ");
+    cpm_compile(compile_command);
+
+  } else if (child == 0){
+    if (!cpm_compile(compile_command)) return 0;
+    else return child;
+  }
+  return 0;
+  
+}
+
+//POLLS ASYNC COMPILATION
+void cpm_compile_poll(int compile_index){
+  int status;
+  if (compile_index != 0){
+  if (waitpid(compile_index, &status, 0) == -1)
+    cpm_log(CPM_ERROR, "waitpid error\n");
+    perror("error at waitpid: "); 
+  if (WIFSIGNALED(status)) {
+    cpm_log(CPM_ERROR, "Compilation terminated by signal: %d\n", WTERMSIG(status));
+  }}
+}
+
+//Support makefiles and build.c
+void cpm_submodule(const char* path_to_folder){
+  String makefile = {0};
+  string_append(&makefile, path_to_folder);
+  string_append(&makefile, "/");
+  string_append(&makefile, "makefile");
+  String buildc = {0};
+  string_append(&buildc, path_to_folder);
+  string_append(&buildc, "/");
+  string_append(&buildc, "build.c");
+
+  if(file_exists(buildc.str)){
+    cpm_log(CPM_INFO, "Building submodule %s => build.c\n", path_to_folder);
+    Cmd cmd = {0};
+    Cmd run = {0};
+    cpm_cmd_append(&cmd, DEFAULT_COMPILER, buildc.str, "-o");
+    string_append(&cmd, path_to_folder);
+    string_append(&cmd, "/build ");
+    cpm_cmd_append(&cmd, "-I", ".");
+    cpm_compile(cmd);
+
+    cpm_cmd_append(&run, "cd", path_to_folder, "&&");
+    string_append(&run, "./build");
+    cpm_cmd_exec(run);
+  } else if(file_exists(makefile.str)){
+    cpm_log(CPM_INFO, "Building submodule %s => makefile\n", path_to_folder);
+    Cmd cmd = {0};
+    cpm_cmd_append(&cmd, "cd", path_to_folder, "&&", "make");
+    cpm_cmd_exec(cmd);
+  } else {
+    cpm_log(CPM_ERROR, "submodule \"%s\" doesn't have a makefile or build.c\n", path_to_folder);
+  }
+}
 
 #endif
