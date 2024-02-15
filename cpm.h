@@ -30,21 +30,22 @@ SOFTWARE.
 #define CPM_MINOR_VERSON 2
 #define CPM_PATCH_VERSION 1
 
-
 #define DEFAULT_COMPILER "cc"
 #define DEFAULT_CPM_PATH "."
 
-#define UNIMPLEMENTED { \
-  cpm_log(CPM_ERROR, "function is not implemented yet O^O; at line %s\n", __LINE__);\
-  exit(EXIT_FAILURE); }\
-
+#define UNIMPLEMENTED                                                          \
+  {                                                                            \
+    cpm_log(CPM_ERROR, "function is not implemented yet O^O; at line %s\n",    \
+            __LINE__);                                                         \
+    exit(EXIT_FAILURE);                                                        \
+  }
 
 #define KERR "\x1B[31m" // RED
 #define KWAR "\x1B[33m" // YELLOW
 #define KMSG "\x1B[35m" // MAGENTA
 #define KNRM "\x1B[0m"  // NORMAL COLOR
 
-#include <time.h>
+#include <errno.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -53,7 +54,12 @@ SOFTWARE.
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
+
+#include <dirent.h>
+#include <fnmatch.h>
+
 typedef struct String {
   size_t size;
   size_t cap;
@@ -65,14 +71,17 @@ typedef struct MemFile {
   void *data;
 } MemFile;
 
-typedef enum loglvl {
-  CPM_INFO,
-  CPM_WARNING,
-  CPM_ERROR,
-} Loglevel;
+typedef enum loglvl { CPM_INFO, CPM_WARNING, CPM_ERROR, CPM_DEBUG } Loglevel;
 
 // Redefinition of String = Cmd;; OWO
 typedef String Cmd;
+
+typedef struct SplitString {
+  String **strarr;
+  size_t cap;
+  size_t size;
+
+} StringArray;
 
 #define STRING_INIT_CAPA 255 // IDK Should work?
 
@@ -105,13 +114,56 @@ void appendcmdnull(Cmd *cmd, ...) {
   va_end(args);
 }
 
-#define cpm_cmd_append(cmdptr, ...) appendcmdnull(cmdptr, __VA_ARGS__, NULL)
-
-#define cpm_cmd_exec(cmd)                                                      \
-  {                                                                            \
-    system(cmd.str);                                                           \
-    free(cmd.str);                                                             \
+StringArray str_split_at(const char *str, const char *delimiter) {
+  StringArray res = {0};
+  res.cap = 5;
+  res.size = 0;
+  res.strarr = (String **)calloc(res.cap, sizeof(String *));
+  for (int i = 0; i < res.cap; i++) {
+    res.strarr[i] = (String *)calloc(1, sizeof(String));
   }
+  char *srcpy = strdup(str);
+  char *token = strtok(srcpy, delimiter);
+  while (token) {
+    if (res.size == res.cap) {
+      res.cap += 5;
+      res.strarr = (String **)realloc(res.strarr, res.cap * sizeof(String *));
+      for (int i = res.size; i < res.cap; i++) {
+        res.strarr[i] = (String *)calloc(1, sizeof(String));
+      }
+    }
+    ++res.size;
+    string_append(res.strarr[res.size - 1], token);
+    token = strtok(NULL, " ");
+  }
+  free(token);
+  free(srcpy);
+
+  return res;
+}
+
+void string_array_append(StringArray *sp, String str) {
+  if (sp->strarr == NULL) {
+    sp->size = 0;
+    sp->cap = 5;
+    sp->strarr = (String **)calloc(sp->cap, sizeof(String));
+    for (int i = 0; i < sp->cap; i++) {
+      sp->strarr[i] = (String *)calloc(1, sizeof(String));
+    }
+  }
+
+  if (sp->size == sp->cap) {
+    sp->cap += 5;
+    sp->strarr = (String **)realloc(sp->strarr, sp->cap * sizeof(String *));
+    for (int i = sp->size; i < sp->cap; i++) {
+      sp->strarr[i] = (String *)calloc(1, sizeof(String));
+    }
+  }
+  string_append(sp->strarr[sp->size], strdup(str.str));
+  sp->size++;
+}
+
+#define cpm_cmd_append(cmdptr, ...) appendcmdnull(cmdptr, __VA_ARGS__, NULL)
 
 void cpm_log(Loglevel lvl, const char *fmt, ...) {
   String msg = {0};
@@ -131,6 +183,7 @@ void cpm_log(Loglevel lvl, const char *fmt, ...) {
     string_append(&msg, ":");
     string_append(&msg, " ");
     fprintf(stdout, "%s", msg.str);
+    fflush(stdout);
     break;
   case CPM_WARNING:
     string_append(&msg, KWAR);
@@ -140,6 +193,7 @@ void cpm_log(Loglevel lvl, const char *fmt, ...) {
     string_append(&msg, ":");
     string_append(&msg, " ");
     fprintf(stdout, "%s", msg.str);
+    fflush(stdout);
     break;
   case CPM_ERROR:
     string_append(&msg, KERR);
@@ -148,9 +202,22 @@ void cpm_log(Loglevel lvl, const char *fmt, ...) {
     string_append(&msg, timenow);
     string_append(&msg, ":");
     string_append(&msg, " ");
+    fprintf(stderr, "%s", msg.str);
+    fflush(stderr);
+    break;
+#ifndef CPM_DEBUG
+  case CPM_DEBUG:
+    string_append(&msg, KMSG);
+    string_append(&msg, "DEBUG");
+    string_append(&msg, " ");
+    string_append(&msg, timenow);
+    string_append(&msg, ":");
+    string_append(&msg, " ");
     fprintf(stdout, "%s", msg.str);
     break;
+#endif
   }
+
   va_list args;
   va_start(args, fmt);
   vfprintf(stdout, fmt, args);
@@ -159,6 +226,11 @@ void cpm_log(Loglevel lvl, const char *fmt, ...) {
   string_free(msg);
 }
 
+void cpm_cmd_exec(Cmd cmd) {
+  if (system(cmd.str))
+    cpm_log(CPM_ERROR, "cmd: %s failed to execute\n", cmd.str);
+  free(cmd.str);
+}
 // compares file1 against file2 returning true if file1 is newer than file2
 bool cmp_modtime(const char *file1, const char *file2) {
   struct stat oneInfo, twoInfo;
@@ -188,7 +260,7 @@ bool cmp_modtime(const char *file1, const char *file2) {
     cpm_log(CPM_WARNING, "changing current executable to old\n");              \
     cpm_cmd_exec(self_changename_);                                            \
                                                                                \
-    cpm_cmd_append(&self_rebuild_, DEFAULT_COMPILER);                                  \
+    cpm_cmd_append(&self_rebuild_, DEFAULT_COMPILER);                          \
     cpm_cmd_append(&self_rebuild_, __FILE__);                                  \
     cpm_cmd_append(&self_rebuild_, "-o", GETFILENAME(argv[0]));                \
     cpm_log(CPM_WARNING, "rebuilding the builder\n");                          \
@@ -201,30 +273,32 @@ bool cmp_modtime(const char *file1, const char *file2) {
     exit(0);                                                                   \
   }
 
-//FILE OPS
-bool file_exists(const char* file_path){
-  FILE* file;
-  file = fopen(file_path, "r");
-  if (!file){
+// FILE OPS
+bool file_exists(const char *file_path) {
+  FILE *file;
+  file = fopen(file_path, "rb");
+  if (file == NULL) {
     return false;
   }
   fclose(file);
-  return 1;
+  return true;
 }
 
-MemFile load_file_to_mem(const char* file_path){
+MemFile load_file_to_mem(const char *file_path) {
   MemFile file = {0};
-  FILE* actfile =  fopen(file_path, "rb");
-  if( actfile != 0){
+  FILE *actfile = fopen(file_path, "rb");
+  if (actfile != 0) {
     fseek(actfile, 0, SEEK_END);
     file.size = ftell(actfile);
     fseek(actfile, 0, SEEK_SET);
   } else {
-    cpm_log(CPM_ERROR, "Failed to read and load %s to memory, exiting with exit failure\n", file_path);
+    cpm_log(CPM_ERROR,
+            "Failed to read and load %s to memory, exiting with exit failure\n",
+            file_path);
     perror("Errno at load_file_to_mem: ");
     exit(EXIT_FAILURE);
   }
-  void* memoryfile = malloc(file.size);
+  void *memoryfile = malloc(file.size);
   fread(memoryfile, sizeof(char), file.size, actfile);
   file.data = memoryfile;
   fclose(actfile);
@@ -233,45 +307,44 @@ MemFile load_file_to_mem(const char* file_path){
 
 // how to parse
 // typical cmd: clang PATH -o PATH {FLAGS}
-bool cpm_compile(Cmd compilation_cmd){
+bool cpm_compile(Cmd compilation_cmd) {
   size_t arrcap = 5;
   size_t arrcount = 0;
-  char** strarr = (char**) calloc(arrcap, sizeof(char*) );
-  char* srcpy = strdup(compilation_cmd.str);
-  char* token = strtok(srcpy, " ");
-  while(token){
-    if(arrcount == arrcap){
+  char **strarr = (char **)calloc(arrcap, sizeof(char *));
+  char *srcpy = strdup(compilation_cmd.str);
+  char *token = strtok(srcpy, " ");
+  while (token) {
+    if (arrcount == arrcap) {
       arrcap *= 2;
-      strarr = realloc(strarr, arrcap * sizeof(char*));
+      strarr = (char **)realloc(strarr, arrcap * sizeof(char *));
     }
-      ++arrcount;
-      strarr[arrcount - 1] = strdup(token);
-      token = strtok(NULL, " ");
+    ++arrcount;
+    strarr[arrcount - 1] = strdup(token);
+    token = strtok(NULL, " ");
   }
   free(token);
   free(srcpy);
 
-   char* out = 0;
-   char* in = 0;
-  // PURPOSE: DO THIS IN ONE LOOP "Curiosa to demiso"
-  for (int i = 0; i < arrcount; ++i){
+  char *out = 0;
+  char *in = 0;
+  // PURPOSE: DO THIS IN ONE LOOP "kuriosa to demiso"
+  for (int i = 0; i < arrcount; ++i) {
     // Check if the current str is -o and after that it means the output path
-    if(strcmp(strarr[i], "-o") == 0){
+    if (strcmp(strarr[i], "-o") == 0) {
       i++; // Skip an iteration to output path
       out = strdup(strarr[i]);
     }
-    if(strstr(strarr[i], ".c")){
+    if (strstr(strarr[i], ".c")) {
       in = strdup(strarr[i]);
     }
   }
 
   bool res;
-  if(!file_exists(out)){
+  if (!file_exists(out)) {
     cpm_log(CPM_INFO, "%s", compilation_cmd.str);
     cpm_cmd_exec(compilation_cmd);
     res = true;
-  }
-  else if(cmp_modtime(in, out)){
+  } else if (cmp_modtime(in, out)) {
     cpm_log(CPM_INFO, "recompiling %s => %s\n", in, compilation_cmd.str);
     cpm_cmd_exec(compilation_cmd);
     res = true;
@@ -280,10 +353,10 @@ bool cpm_compile(Cmd compilation_cmd){
     free(compilation_cmd.str);
     res = false;
   }
-  
+
   free(in);
   free(out);
-  for (int i = 0; i < arrcap; i++){
+  for (int i = 0; i < arrcap; i++) {
     free(strarr[i]);
   }
   free(strarr);
@@ -291,65 +364,108 @@ bool cpm_compile(Cmd compilation_cmd){
 }
 
 // RETURNS PID OF CHILD
-int cpm_compile_async(Cmd compile_command){
+int cpm_compile_async(Cmd compile_command) {
   int child = fork();
-  if(child == -1){
-    cpm_log(CPM_WARNING, "Could not fork process for async compilation, defaulting to non-async compilation\n");
+  if (child == -1) {
+    cpm_log(CPM_WARNING, "Could not fork process for async compilation, "
+                         "defaulting to non-async compilation\n");
     perror("At fork: ");
     cpm_compile(compile_command);
 
-  } else if (child == 0){
-    if (!cpm_compile(compile_command)) return 0;
-    else return child;
+  } else if (child == 0) {
+    if (!cpm_compile(compile_command))
+      return 0;
+    else
+      return child;
   }
   return 0;
-  
 }
 
-//POLLS ASYNC COMPILATION
-void cpm_compile_poll(int compile_index){
+// POLLS ASYNC COMPILATION
+void cpm_compile_poll(int compile_index) {
   int status;
-  if (compile_index != 0){
-  if (waitpid(compile_index, &status, 0) == -1)
-    cpm_log(CPM_ERROR, "waitpid error\n");
-    perror("error at waitpid: "); 
-  if (WIFSIGNALED(status)) {
-    cpm_log(CPM_ERROR, "Compilation terminated by signal: %d\n", WTERMSIG(status));
-  }}
+  if (compile_index != 0) {
+    if (waitpid(compile_index, &status, 0) == -1)
+      cpm_log(CPM_ERROR, "waitpid error\n");
+    perror("error at waitpid: ");
+    if (WIFSIGNALED(status)) {
+      cpm_log(CPM_ERROR, "Compilation terminated by signal: %d\n",
+              WTERMSIG(status));
+    }
+  }
 }
 
-//Support makefiles and build.c
-void cpm_submodule(const char* path_to_folder){
+// Support makefiles and build.c
+void cpm_submodule(const char *path_to_folder, const char *options) {
   String makefile = {0};
   string_append(&makefile, path_to_folder);
   string_append(&makefile, "/");
   string_append(&makefile, "makefile");
+  String Makefile = {0};
+  string_append(&Makefile, path_to_folder);
+  string_append(&Makefile, "/");
+  string_append(&Makefile, "Makefile");
   String buildc = {0};
   string_append(&buildc, path_to_folder);
   string_append(&buildc, "/");
   string_append(&buildc, "build.c");
 
-  if(file_exists(buildc.str)){
+  if (file_exists(buildc.str)) {
     cpm_log(CPM_INFO, "Building submodule %s => build.c\n", path_to_folder);
     Cmd cmd = {0};
     Cmd run = {0};
     cpm_cmd_append(&cmd, DEFAULT_COMPILER, buildc.str, "-o");
     string_append(&cmd, path_to_folder);
-    string_append(&cmd, "/build ");
+    string_append(&cmd, "/buildscript ");
     cpm_cmd_append(&cmd, "-I", ".");
     cpm_compile(cmd);
 
     cpm_cmd_append(&run, "cd", path_to_folder, "&&");
-    string_append(&run, "./build");
+    cpm_cmd_append(&run, "./buildscript");
+    if (options != 0)
+      cpm_cmd_append(&run, options);
     cpm_cmd_exec(run);
-  } else if(file_exists(makefile.str)){
+  } else if (file_exists(makefile.str) || file_exists(Makefile.str)) {
     cpm_log(CPM_INFO, "Building submodule %s => makefile\n", path_to_folder);
     Cmd cmd = {0};
     cpm_cmd_append(&cmd, "cd", path_to_folder, "&&", "make");
+    if (options != 0)
+      cpm_cmd_append(&cmd, options);
     cpm_cmd_exec(cmd);
   } else {
-    cpm_log(CPM_ERROR, "submodule \"%s\" doesn't have a makefile or build.c\n", path_to_folder);
+    cpm_log(CPM_ERROR, "submodule \"%s\" doesn't have a makefile or build.c\n",
+            path_to_folder);
   }
 }
 
+void cpm_mkdir(const char *dirpath) {
+  Cmd cmd = {0};
+  cpm_cmd_append(&cmd, "mkdir", "-p", dirpath);
+  cpm_cmd_exec(cmd);
+}
+
+StringArray dir_glob(const char *dir_path, const char *pattern) {
+  DIR *dir;
+  struct dirent *entry;
+  if ((dir = opendir(dir_path)) == NULL) {
+    cpm_log(CPM_ERROR, "Directory globbing failed\n");
+    perror("reason:");
+  }
+  String res = {0};
+
+  while ((entry = readdir(dir)) != NULL) {
+    if (fnmatch(pattern, entry->d_name, 0) == 0) {
+      if (!strcmp(entry->d_name, "build.c")) {
+        continue;
+      }
+      string_append(&res, dir_path);
+      string_append(&res, "/");
+      cpm_cmd_append(&res, entry->d_name);
+    }
+  }
+  free(dir);
+  free(entry);
+  StringArray trueres = str_split_at(res.str, " ");
+  return trueres;
+}
 #endif
