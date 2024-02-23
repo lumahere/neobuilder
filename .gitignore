@@ -1,2 +1,5 @@
 submod1/
 submod2/
+**/build*
+example/builds/
+.vscode

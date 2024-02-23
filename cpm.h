@@ -28,14 +28,15 @@ SOFTWARE.
 // 0.1.2
 #define CPM_MAJOR_VERSION 0
 #define CPM_MINOR_VERSON 2
-#define CPM_PATCH_VERSION 1
+#define CPM_PATCH_VERSION 3
 
 #define DEFAULT_COMPILER "cc"
 #define DEFAULT_CPM_PATH "."
 
 #define UNIMPLEMENTED                                                          \
   {                                                                            \
-    cpm_log(CPM_ERROR, "function is not implemented yet O^O; at line %s\n",    \
+    cpm_log(CPM_ERROR,                                                         \
+            "function is not implemented yet O^O; CPM.h at line %d\n",         \
             __LINE__);                                                         \
     exit(EXIT_FAILURE);                                                        \
   }
@@ -83,6 +84,8 @@ typedef struct SplitString {
 
 } StringArray;
 
+typedef enum CliReturn { BUILD, RUN, CLEAN, NONE } CliReturn;
+
 #define STRING_INIT_CAPA 255 // IDK Should work?
 
 void string_append(String *str, const char *src) {
@@ -97,8 +100,12 @@ void string_append(String *str, const char *src) {
     str->cap *= 2;
     str->str = (char *)realloc(str->str, str->cap);
   }
-  str->str = strcat(str->str, src);
-  str->size += srcsize;
+  if (!src) {
+    str->str = strcat(str->str, "");
+  } else {
+    str->str = strcat(str->str, src);
+    str->size += srcsize;
+  }
 }
 #define string_free(string) free(string.str);
 
@@ -161,6 +168,13 @@ void string_array_append(StringArray *sp, String str) {
   }
   string_append(sp->strarr[sp->size], strdup(str.str));
   sp->size++;
+}
+
+void string_array_join(StringArray *src, String *dest, const char *delimiter) {
+  for (int i = 0; i < src->size; i++) {
+    string_append(dest, src->strarr[i]->str);
+    string_append(dest, delimiter);
+  }
 }
 
 #define cpm_cmd_append(cmdptr, ...) appendcmdnull(cmdptr, __VA_ARGS__, NULL)
@@ -227,6 +241,7 @@ void cpm_log(Loglevel lvl, const char *fmt, ...) {
 }
 
 void cpm_cmd_exec(Cmd cmd) {
+  // cpm_log(CPM_INFO, "%s\n", cmd.str);
   if (system(cmd.str))
     cpm_log(CPM_ERROR, "cmd: %s failed to execute\n", cmd.str);
   free(cmd.str);
@@ -308,6 +323,8 @@ MemFile load_file_to_mem(const char *file_path) {
 // how to parse
 // typical cmd: clang PATH -o PATH {FLAGS}
 bool cpm_compile(Cmd compilation_cmd) {
+
+  cpm_log(CPM_INFO, "%s\n", compilation_cmd.str);
   size_t arrcap = 5;
   size_t arrcount = 0;
   char **strarr = (char **)calloc(arrcap, sizeof(char *));
@@ -341,7 +358,6 @@ bool cpm_compile(Cmd compilation_cmd) {
 
   bool res;
   if (!file_exists(out)) {
-    cpm_log(CPM_INFO, "%s", compilation_cmd.str);
     cpm_cmd_exec(compilation_cmd);
     res = true;
   } else if (cmp_modtime(in, out)) {
@@ -422,6 +438,8 @@ void cpm_submodule(const char *path_to_folder, const char *options) {
 
     cpm_cmd_append(&run, "cd", path_to_folder, "&&");
     cpm_cmd_append(&run, "./buildscript");
+    cpm_log(CPM_INFO, "========================================================"
+                      "==========\n\n");
     if (options != 0)
       cpm_cmd_append(&run, options);
     cpm_cmd_exec(run);
@@ -436,11 +454,25 @@ void cpm_submodule(const char *path_to_folder, const char *options) {
     cpm_log(CPM_ERROR, "submodule \"%s\" doesn't have a makefile or build.c\n",
             path_to_folder);
   }
+  string_free(Makefile);
+  string_free(makefile);
+  string_free(buildc);
 }
 
 void cpm_mkdir(const char *dirpath) {
   Cmd cmd = {0};
   cpm_cmd_append(&cmd, "mkdir", "-p", dirpath);
+  cpm_cmd_exec(cmd);
+}
+void cpm_rm(const char *path) {
+  Cmd cmd = {0};
+  cpm_cmd_append(&cmd, "rm", "-rf", path);
+  cpm_cmd_exec(cmd);
+}
+
+void cpm_cp(const char *srcpath, const char *destpath) {
+  Cmd cmd = {0};
+  cpm_cmd_append(&cmd, "cp", "-r", srcpath, destpath);
   cpm_cmd_exec(cmd);
 }
 
@@ -468,4 +500,27 @@ StringArray dir_glob(const char *dir_path, const char *pattern) {
   StringArray trueres = str_split_at(res.str, " ");
   return trueres;
 }
+
+CliReturn cpm_input_check(int argc, char **argv) {
+  if (argc < 2) {
+    cpm_log(CPM_ERROR,
+            "Invalid use\nUsage: %s [COMMAND] [FLAGS]\navailable "
+            "commands\nrun\nbuild\nclean",
+            argv[0]);
+    exit(1);
+  }
+  if (!strcmp(argv[1], "clean")) {
+    return CLEAN;
+  } else if (!strcmp(argv[1], "build")) {
+    return BUILD;
+
+  } else if (!strcmp(argv[1], "run")) {
+    return RUN;
+  }
+
+  return NONE;
+}
+
+void cpm_enable_project_variables() { UNIMPLEMENTED; }
+
 #endif
