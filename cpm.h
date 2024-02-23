@@ -41,6 +41,14 @@ SOFTWARE.
     exit(EXIT_FAILURE);                                                        \
   }
 
+#define TODO                                                                   \
+  {                                                                            \
+    cpm_log(CPM_ERROR,                                                         \
+            "function is still being worked on; CPM.h at line %d\n",           \
+            __LINE__);                                                         \
+    exit(EXIT_FAILURE);                                                        \
+  }
+
 #define KERR "\x1B[31m" // RED
 #define KWAR "\x1B[33m" // YELLOW
 #define KMSG "\x1B[35m" // MAGENTA
@@ -84,7 +92,9 @@ typedef struct SplitString {
 
 } StringArray;
 
-typedef enum CliReturn { BUILD, RUN, CLEAN, NONE } CliReturn;
+typedef enum CliReturn { BUILD, RUN, CLEAN } CliReturn;
+
+typedef enum { CPM_C, SHELL } ScriptType;
 
 #define STRING_INIT_CAPA 255 // IDK Should work?
 
@@ -459,6 +469,29 @@ void cpm_submodule(const char *path_to_folder, const char *options) {
   string_free(buildc);
 }
 
+void cpm_exec_extern_script(ScriptType type, const char *path,
+                            const char *args) {
+  TODO;
+  switch (type) {
+
+  case CPM_C: {
+    Cmd compilecmd = {0};
+    Cmd run = {0};
+    char *pathcpy = strdup(path);
+    str_split_at(pathcpy, ".");
+    cpm_cmd_append(&compilecmd, DEFAULT_COMPILER, path, "-o");
+    cpm_compile(compilecmd);
+  } break;
+
+  case SHELL: {
+    Cmd shellexec = {0};
+    cpm_cmd_append(&shellexec, path, args);
+    cpm_cmd_exec(shellexec);
+    break;
+  }
+  }
+}
+
 void cpm_mkdir(const char *dirpath) {
   Cmd cmd = {0};
   cpm_cmd_append(&cmd, "mkdir", "-p", dirpath);
@@ -517,8 +550,7 @@ CliReturn cpm_input_check(int argc, char **argv) {
   } else if (!strcmp(argv[1], "run")) {
     return RUN;
   }
-
-  return NONE;
+  exit(1);
 }
 
 void cpm_enable_project_variables() { UNIMPLEMENTED; }

@@ -3,6 +3,7 @@
 const char *build_path = "./builds/";
 const char *tgt_name = "./builds/main";
 const char *src = "./src/main.c";
+
 int main(void) {
   cpm_mkdir(build_path);
 
