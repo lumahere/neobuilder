@@ -3,3 +3,5 @@ submod2/
 **/build*
 example/builds/
 .vscode
+**/a.out
+parm.c
