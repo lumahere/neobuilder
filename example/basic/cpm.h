@@ -22,13 +22,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
  * */
 
+#pragma once
 #ifndef H_NCPM_BUILDER
 #define H_NCPM_BUILDER
 // Version Control
 // 0.3.0
 #define CPM_MAJOR_VERSION 0
 #define CPM_MINOR_VERSON 3
-#define CPM_PATCH_VERSION 0
+#define CPM_PATCH_VERSION 1
 
 #define DEFAULT_COMPILER "cc"
 #define DEFAULT_CPM_PATH "."
@@ -48,6 +49,8 @@ SOFTWARE.
             __LINE__, __func__);                                                    \
     exit(EXIT_FAILURE);                                                             \
   }
+
+  /*WARNING: DEBUG CAUSES SO MUCH MEMORY ERRORS, DON'T INCLUDE IN RELEASES*/
 #define DEBUG(var, is_string)                                                                                                                              \
   {                                                                                                                                                        \
     if (is_string)                                                                                                                                         \
@@ -60,7 +63,6 @@ SOFTWARE.
 #define KMSG "\x1B[35m" // MAGENTA
 #define KNRM "\x1B[0m"  // NORMAL COLOR
 
-#define IMMUTABLE
 
 /*NOT WINDOWS FRIENDLY*/
 #include <errno.h>
@@ -142,7 +144,7 @@ typedef enum CliReturn
   CLEAN
 } CliReturn;
 
-#define STRING_INIT_CAPA 255 // IDK Should work?
+#define STRING_INIT_CAPA 125 // IDK Should work?
 
 void cpm_string_append(String *str, const char *src)
 {
@@ -152,7 +154,7 @@ void cpm_string_append(String *str, const char *src)
     str->cap = STRING_INIT_CAPA;
     str->size = 0;
     str->str =
-        (char *)calloc(STRING_INIT_CAPA, sizeof(char)); // Malloc cant'locc
+        (char *)calloc(STRING_INIT_CAPA, sizeof(char)); // Malloc cant'lloc
   }
   if (str->size + srcsize >= str->cap)
   {
@@ -160,9 +162,7 @@ void cpm_string_append(String *str, const char *src)
     str->str = (char *)realloc(str->str, str->cap);
   }
   if (!src)
-  {
-    str->str = strcat(str->str, "");
-  }
+    return;
   else
   {
     str->str = strcat(str->str, src);
@@ -371,8 +371,8 @@ bool cmp_modtime(const char *file1, const char *file2)
     Cmd self_rebuild_ = {0};                                      \
     cpm_cmd_append(&self_changename_, "mv");                      \
     cpm_cmd_append(&self_changename_, argv[0]);                   \
-    string_append(&self_changename_, argv[0]);                    \
-    string_append(&self_changename_, ".old");                     \
+    cpm_string_append(&self_changename_, argv[0]);                    \
+    cpm_string_append(&self_changename_, ".old");                     \
     cpm_log(CPM_WARNING, "changing current executable to old\n"); \
     cpm_cmd_exec(self_changename_);                               \
                                                                   \
@@ -544,8 +544,8 @@ void cpm_cp(const char *srcpath, const char *destpath)
   cpm_cmd_exec(cmd);
 }
 
-// Support makefiles and build.c
-void cpm_submodule(const char *path_to_folder, const char *options)
+// Support makefiles and build.c, Arguments are freed when entered, arguments can be NULL
+void cpm_submodule(const char *path_to_folder, Arguments* args)
 {
 
   String makefile = {0};
@@ -577,18 +577,26 @@ void cpm_submodule(const char *path_to_folder, const char *options)
     cpm_cmd_append(&run, "./buildscript");
     cpm_log(CPM_INFO, "========================================================"
                       "==========\n\n");
-    if (options != 0)
-      cpm_cmd_append(&run, options);
+    if (args != NULL){
+      for(int i=0; i < args->count; i++){
+      cpm_cmd_append(&cmd, args->array[i]->str);
+      }
+    }
     cpm_cmd_exec(run);
+    cpm_string_array_free(*args);
   }
   else if (cpm_file_exists(makefile.str) || cpm_file_exists(Makefile.str))
   {
     cpm_log(CPM_INFO, "Building submodule %s => makefile\n", path_to_folder);
     Cmd cmd = {0};
     cpm_cmd_append(&cmd, "cd", path_to_folder, "&&", "make");
-    if (options != 0)
-      cpm_cmd_append(&cmd, options);
+    if (args != NULL){
+      for(int i=0; i < args->count; i++){
+      cpm_cmd_append(&cmd, *args->array[i]->str);
+      }
+    }
     cpm_cmd_exec(cmd);
+    cpm_string_array_free(*args);
   }
   else
   {
@@ -681,26 +689,34 @@ void cpm_append_cli_cmd_arr(CliCommandArray *arr, CliCommand cmd)
   arr->cmdcount++;
 }
 
-CliEnv cpm_create_cliEnv_Cargs(CliCommandArray arr, int argc, char **argv)
+CliEnv cpm_create_cliEnv_Cargs(int argc, char **argv)
 {
   Arguments args = cpm_Cargs2cpm_args(argc, argv);
   CliEnv env = {0};
+  CliCommandArray arr = {0};
   env.cmds = arr; 
   env.args = args;
   return env;
 }
-CliEnv cpm_create_cliEnv(CliCommandArray arr, Arguments args){
+CliEnv cpm_create_cliEnv(Arguments args){
   CliEnv env = {0};
+  CliCommandArray arr = {0};
   env.cmds = arr;
   env.args = args;
   return env;
 }
 
+void cpm_append_env_commands(CliEnv* env, CliCommand cmd){
+    cpm_append_cli_cmd_arr(&env->cmds, cmd);
+};
+
 void cpm_free_env(CliEnv env){
   cpm_string_array_free(env.args);
     free(env.cmds.cmds);
 }
-
+void cpm_append_arguments(Arguments* args, const char* cstr){
+  cpm_string_array_append_cstr(args, cstr);
+}
 void cpm_CLI(CliEnv env)
 {
   char input[31] = {0};
