@@ -28,44 +28,53 @@ SOFTWARE.
 // Version Control
 // 0.3.0
 #define CPM_MAJOR_VERSION 0
-#define CPM_MINOR_VERSON 3
-#define CPM_PATCH_VERSION 1
+#define CPM_MINOR_VERSON 4
+#define CPM_PATCH_VERSION 0
 
 #define DEFAULT_COMPILER "cc"
 #define DEFAULT_CPM_PATH "."
 
-#define UNIMPLEMENTED                                                                  \
-  {                                                                                    \
-    cpm_log(CPM_ERROR,                                                                 \
-            "function is not implemented yet O^O; CPM.h at line %d and function %s\n", \
-            __LINE__, __func__);                                                       \
-    exit(EXIT_FAILURE);                                                                \
+#define UNIMPLEMENTED                                                          \
+  {                                                                            \
+    cpm_log(CPM_ERROR,                                                         \
+            "function is not implemented yet O^O; CPM.h at line %d and "       \
+            "function %s\n",                                                   \
+            __LINE__, __func__);                                               \
+    exit(EXIT_FAILURE);                                                        \
   }
 
-#define TODO                                                                        \
-  {                                                                                 \
-    cpm_log(CPM_ERROR,                                                              \
-            "function is still being worked on; CPM.h at line %d and fuction %s\n", \
-            __LINE__, __func__);                                                    \
-    exit(EXIT_FAILURE);                                                             \
+#define TODO                                                                   \
+  {                                                                            \
+    cpm_log(CPM_ERROR,                                                         \
+            "function is still being worked on; CPM.h at line %d and fuction " \
+            "%s\n",                                                            \
+            __LINE__, __func__);                                               \
+    exit(EXIT_FAILURE);                                                        \
   }
 
-  /*WARNING: DEBUG CAUSES SO MUCH MEMORY ERRORS, DON'T INCLUDE IN RELEASES*/
-#define DEBUG(var, is_string)                                                                                                                              \
-  {                                                                                                                                                        \
-    if (is_string)                                                                                                                                         \
-      cpm_log(CPM_MSG, "DEBUG (%s in %s at line %d): float: %f, char: %c int: %d, hex: %x, uint: %u, address: %p, string: %s\n", #var, __FILE__, __LINE__, var, var, var, var, var, &var, var); \
-    else                                                                                                                                                   \
-      cpm_log(CPM_MSG, "DEBUG (%s in %s at line %d): float: %f, char: %c int: %d, hex: %x, uint: %u, address: %p\n", #var, __FILE__, __LINE__, var, var, var, var, var, &var);                  \
+/*WARNING: DEBUG CAUSES SO MUCH MEMORY ERRORS, DON'T INCLUDE IN RELEASES*/
+#define DEBUG(var, is_string)                                                  \
+  {                                                                            \
+    if (is_string)                                                             \
+      cpm_log(CPM_MSG,                                                         \
+              "DEBUG (%s in %s at line %d): float: %f, char: %c int: %d, "     \
+              "hex: %x, uint: %u, address: %p, string: %s\n",                  \
+              #var, __FILE__, __LINE__, var, var, var, var, var, &var, var);   \
+    else                                                                       \
+      cpm_log(CPM_MSG,                                                         \
+              "DEBUG (%s in %s at line %d): float: %f, char: %c int: %d, "     \
+              "hex: %x, uint: %u, address: %p\n",                              \
+              #var, __FILE__, __LINE__, var, var, var, var, var, &var);        \
   }
 #define KERR "\x1B[31m" // RED
 #define KWAR "\x1B[33m" // YELLOW
 #define KMSG "\x1B[35m" // MAGENTA
 #define KNRM "\x1B[0m"  // NORMAL COLOR
 
-
 /*NOT WINDOWS FRIENDLY*/
+#include <dirent.h>
 #include <errno.h>
+#include <fnmatch.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -76,24 +85,19 @@ SOFTWARE.
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
-#include <dirent.h>
-#include <fnmatch.h>
 
-typedef struct String
-{
+typedef struct String {
   size_t size;
   size_t cap;
   char *str;
 } String;
 
-typedef struct MemFile
-{
+typedef struct MemFile {
   size_t size;
   void *data;
 } MemFile;
 
-typedef enum loglvl
-{
+typedef enum loglvl {
   CPM_INFO,
   CPM_WARNING,
   CPM_ERROR,
@@ -102,8 +106,7 @@ typedef enum loglvl
   CPM_MSG
 } Loglevel;
 
-typedef struct StringArray
-{
+typedef struct StringArray {
   String **array;
   size_t cap;
   size_t count;
@@ -112,65 +115,53 @@ typedef struct StringArray
 
 typedef StringArray Arguments;
 
-typedef struct CliCommand
-{
+typedef struct CliCommand {
   const char *name;
   const char *desc;
   void (*function)(Arguments); // argc, argv
 } CliCommand;
 
-typedef struct CliCommandArray
-{
+typedef struct CliCommandArray {
   CliCommand *cmds;
   int cmdcount;
   int cmdcap;
 } CliCommandArray;
 
-typedef struct CliEnv
-{
+typedef struct CliEnv {
   CliCommandArray cmds;
   Arguments args;
 } CliEnv;
 
 // Redefinition of String = Cmd;; OWO
 typedef String Cmd;
+typedef String Path;
+typedef StringArray PathArray;
 
-
-
-typedef enum CliReturn
-{
-  BUILD,
-  RUN,
-  CLEAN
-} CliReturn;
+typedef enum CliReturn { BUILD, RUN, CLEAN } CliReturn;
 
 #define STRING_INIT_CAPA 125 // IDK Should work?
 
-void cpm_string_append(String *str, const char *src)
-{
+void cpm_string_append(String *str, const char *src) {
   size_t srcsize = strlen(src);
-  if (!str->str)
-  {
+  if (!str->str) {
     str->cap = STRING_INIT_CAPA;
     str->size = 0;
     str->str =
         (char *)calloc(STRING_INIT_CAPA, sizeof(char)); // Malloc cant'lloc
   }
-  if (str->size + srcsize >= str->cap)
-  {
+  if (str->size + srcsize >= str->cap) {
     str->cap *= 2;
     str->str = (char *)realloc(str->str, str->cap);
   }
   if (!src)
     return;
-  else
-  {
+  else {
     str->str = strcat(str->str, src);
     str->size += srcsize;
   }
 }
 
-String string_from_cstr(const char* cstr){
+String cpm_string_from_cstr(const char *cstr) {
   String res = {0};
   cpm_string_append(&res, cstr);
   return res;
@@ -178,13 +169,11 @@ String string_from_cstr(const char* cstr){
 
 #define string_free(string) free(string.str);
 
-void appendcmdnull(Cmd *cmd, ...)
-{
+void appendcmdnull(Cmd *cmd, ...) {
   va_list args;
   va_start(args, cmd);
   char *arg = va_arg(args, char *);
-  while (arg != NULL)
-  {
+  while (arg != NULL) {
     cpm_string_append(cmd, arg);
     cpm_string_append(cmd, " ");
     arg = va_arg(args, char *);
@@ -192,26 +181,21 @@ void appendcmdnull(Cmd *cmd, ...)
   va_end(args);
 }
 
-StringArray cpm_str_split_at(const char *str, const char *delimiter)
-{
+StringArray cpm_str_split_at(const char *str, const char *delimiter) {
   StringArray res = {0};
   res.cap = 5;
   res.count = 0;
   res.array = (String **)calloc(res.cap, sizeof(String *));
-  for (int i = 0; i < res.cap; i++)
-  {
+  for (int i = 0; i < res.cap; i++) {
     res.array[i] = (String *)calloc(1, sizeof(String));
   }
   char *srcpy = strdup(str);
   char *token = strtok(srcpy, delimiter);
-  while (token)
-  {
-    if (res.count == res.cap)
-    {
+  while (token) {
+    if (res.count == res.cap) {
       res.cap += 5;
       res.array = (String **)realloc(res.array, res.cap * sizeof(String *));
-      for (int i = res.count; i < res.cap; i++)
-      {
+      for (int i = res.count; i < res.cap; i++) {
         res.array[i] = (String *)calloc(1, sizeof(String));
       }
     }
@@ -225,53 +209,51 @@ StringArray cpm_str_split_at(const char *str, const char *delimiter)
   return res;
 }
 
-void cpm_string_array_append(StringArray *sp, String str)
-{
-  if (sp->array == NULL)
-  {
+void cpm_string_array_append(StringArray *sp, String str) {
+  if (sp->array == NULL) {
     sp->count = 0;
     sp->cap = 5;
     sp->array = (String **)calloc(sp->cap, sizeof(String));
-    for (int i = 0; i < sp->cap; i++)
-    {
+    for (int i = 0; i < sp->cap; i++) {
       sp->array[i] = (String *)calloc(1, sizeof(String));
     }
   }
-  if (sp->count == sp->cap)
-  {
+  if (sp->count == sp->cap) {
     sp->cap += 5;
     sp->array = (String **)realloc(sp->array, sp->cap * sizeof(String *));
-    for (int i = sp->count; i < sp->cap; i++)
-    {
+    for (int i = sp->count; i < sp->cap; i++) {
       sp->array[i] = (String *)calloc(1, sizeof(String));
     }
   }
-  cpm_string_append(sp->array[sp->count], str.str); //STRDUP REMOVED, IF SIGFAULT THEN ADD STRDUP BACK;
+  cpm_string_append(
+      sp->array[sp->count],
+      str.str); // STRDUP REMOVED, IF SIGFAULT THEN ADD STRDUP BACK;
   sp->count++;
 }
 
-void cpm_string_array_append_cstr(StringArray* sp, const char* cstr){
-  String src = string_from_cstr(cstr);
+String cpm_string_copy(String *other) {
+  String res = cpm_string_from_cstr(other->str);
+  return res;
+}
+
+void cpm_string_array_append_cstr(StringArray *sp, const char *cstr) {
+  String src = cpm_string_from_cstr(cstr);
   cpm_string_array_append(sp, src);
   string_free(src);
 }
 
-void cpm_string_array_free(StringArray str)
-{
-  for (int a = 0; a < str.count; a++)
-  {
+void cpm_string_array_free(StringArray str) {
+  for (int a = 0; a < str.count; a++) {
     free(str.array[a]->str);
   }
-  for (int a = 0; a < str.cap; a++)
-  {
+  for (int a = 0; a < str.cap; a++) {
     free(str.array[a]);
   }
   free(str.array);
 }
-void cpm_string_array_join(StringArray *src, String *dest, const char *delimiter)
-{
-  for (int i = 0; i < src->count; i++)
-  {
+void cpm_string_array_join(StringArray *src, String *dest,
+                           const char *delimiter) {
+  for (int i = 0; i < src->count; i++) {
     cpm_string_append(dest, src->array[i]->str);
     cpm_string_append(dest, delimiter);
   }
@@ -279,8 +261,7 @@ void cpm_string_array_join(StringArray *src, String *dest, const char *delimiter
 
 #define cpm_cmd_append(cmdptr, ...) appendcmdnull(cmdptr, __VA_ARGS__, NULL)
 
-void cpm_log(Loglevel lvl, const char *fmt, ...)
-{
+void cpm_log(Loglevel lvl, const char *fmt, ...) {
   String msg = {0};
   time_t time_now;
   struct tm *time_info;
@@ -289,8 +270,7 @@ void cpm_log(Loglevel lvl, const char *fmt, ...)
   char timenow[128];
   sprintf(timenow, "(%02d:%02d:%02d)", time_info->tm_hour, time_info->tm_min,
           time_info->tm_sec);
-  switch (lvl)
-  {
+  switch (lvl) {
   case CPM_INFO:
     cpm_string_append(&msg, KMSG);
     cpm_string_append(&msg, "LOG");
@@ -336,25 +316,21 @@ void cpm_log(Loglevel lvl, const char *fmt, ...)
   string_free(msg);
 }
 
-void cpm_cmd_exec(Cmd cmd)
-{
+void cpm_cmd_exec(Cmd cmd) {
   // cpm_log(CPM_INFO, "%s\n", cmd.str);
   if (system(cmd.str))
     cpm_log(CPM_ERROR, "cmd: %s failed to execute\n", cmd.str);
   free(cmd.str);
 }
 // compares file1 against file2 returning true if file1 is newer than file2
-bool cmp_modtime(const char *file1, const char *file2)
-{
+bool cmp_modtime(const char *file1, const char *file2) {
   struct stat oneInfo, twoInfo;
-  if (-1 == stat(file1, &oneInfo))
-  {
+  if (-1 == stat(file1, &oneInfo)) {
     cpm_log(CPM_ERROR, "Failed to stat file1 at %d\n", __LINE__);
     perror("stat: ");
     exit(-1);
   }
-  if (-1 == stat(file2, &twoInfo))
-  {
+  if (-1 == stat(file2, &twoInfo)) {
     cpm_log(CPM_ERROR, "Failed to stat file2 at %d\n", __LINE__);
     perror("stat: ");
     exit(-1);
@@ -363,58 +339,50 @@ bool cmp_modtime(const char *file1, const char *file2)
 }
 
 #define GETFILENAME(name) (strrchr(name, '/') ? strrchr(name, '/') + 1 : name)
-#define CPM_REBUILD_SELF(argv)                                    \
-                                                                  \
-  if (cmp_modtime(__FILE__, argv[0]))                             \
-  {                                                               \
-    Cmd self_changename_ = {0};                                   \
-    Cmd self_rebuild_ = {0};                                      \
-    cpm_cmd_append(&self_changename_, "mv");                      \
-    cpm_cmd_append(&self_changename_, argv[0]);                   \
-    cpm_string_append(&self_changename_, argv[0]);                    \
-    cpm_string_append(&self_changename_, ".old");                     \
-    cpm_log(CPM_WARNING, "changing current executable to old\n"); \
-    cpm_cmd_exec(self_changename_);                               \
-                                                                  \
-    cpm_cmd_append(&self_rebuild_, DEFAULT_COMPILER);             \
-    cpm_cmd_append(&self_rebuild_, __FILE__);                     \
-    cpm_cmd_append(&self_rebuild_, "-o", GETFILENAME(argv[0]));   \
-    cpm_log(CPM_WARNING, "rebuilding the builder\n");             \
-    cpm_cmd_exec(self_rebuild_);                                  \
-    cpm_log(CPM_INFO, "running new builder!\n");                  \
-    if (system(argv[0]))                                          \
-    {                                                             \
-      cpm_log(CPM_ERROR, "failed to run new builder!\n");         \
-      exit(1);                                                    \
-    }                                                             \
-    exit(0);                                                      \
+#define CPM_REBUILD_SELF(argv)                                                 \
+                                                                               \
+  if (cmp_modtime(__FILE__, argv[0])) {                                        \
+    Cmd self_changename_ = {0};                                                \
+    Cmd self_rebuild_ = {0};                                                   \
+    cpm_cmd_append(&self_changename_, "mv");                                   \
+    cpm_cmd_append(&self_changename_, argv[0]);                                \
+    cpm_string_append(&self_changename_, argv[0]);                             \
+    cpm_string_append(&self_changename_, ".old");                              \
+    cpm_log(CPM_WARNING, "changing current executable to old\n");              \
+    cpm_cmd_exec(self_changename_);                                            \
+                                                                               \
+    cpm_cmd_append(&self_rebuild_, DEFAULT_COMPILER);                          \
+    cpm_cmd_append(&self_rebuild_, __FILE__);                                  \
+    cpm_cmd_append(&self_rebuild_, "-o", GETFILENAME(argv[0]));                \
+    cpm_log(CPM_WARNING, "rebuilding the builder\n");                          \
+    cpm_cmd_exec(self_rebuild_);                                               \
+    cpm_log(CPM_INFO, "running new builder!\n");                               \
+    if (system(argv[0])) {                                                     \
+      cpm_log(CPM_ERROR, "failed to run new builder!\n");                      \
+      exit(1);                                                                 \
+    }                                                                          \
+    exit(0);                                                                   \
   }
 
 // FILE OPS
-bool cpm_file_exists(const char *file_path)
-{
+bool cpm_file_exists(const char *file_path) {
   FILE *file;
   file = fopen(file_path, "rb");
-  if (file == NULL)
-  {
+  if (file == NULL) {
     return false;
   }
   fclose(file);
   return true;
 }
 
-MemFile cpm_load_file_to_mem(const char *file_path)
-{
+MemFile cpm_load_file_to_mem(const char *file_path) {
   MemFile file = {0};
   FILE *actfile = fopen(file_path, "rb");
-  if (actfile != 0)
-  {
+  if (actfile != 0) {
     fseek(actfile, 0, SEEK_END);
     file.size = ftell(actfile);
     fseek(actfile, 0, SEEK_SET);
-  }
-  else
-  {
+  } else {
     cpm_log(CPM_ERROR,
             "Failed to read and load %s to memory, exiting with exit failure\n",
             file_path);
@@ -429,9 +397,9 @@ MemFile cpm_load_file_to_mem(const char *file_path)
 }
 
 // how to parse
-// typical cmd: clang PATH -o PATH {FLAGS}
-bool cpm_compile(Cmd compilation_cmd)
-{
+// typical cmd: {compiler} PATH -o PATH {FLAGS}
+// WARNING: this command is designed for one file compilation
+bool cpm_compile(Cmd compilation_cmd) {
 
   cpm_log(CPM_INFO, "%s\n", compilation_cmd.str);
   size_t arrcap = 5;
@@ -439,10 +407,8 @@ bool cpm_compile(Cmd compilation_cmd)
   char **strarr = (char **)calloc(arrcap, sizeof(char *));
   char *srcpy = strdup(compilation_cmd.str);
   char *token = strtok(srcpy, " ");
-  while (token)
-  {
-    if (arrcount == arrcap)
-    {
+  while (token) {
+    if (arrcount == arrcap) {
       arrcap *= 2;
       strarr = (char **)realloc(strarr, arrcap * sizeof(char *));
     }
@@ -455,35 +421,31 @@ bool cpm_compile(Cmd compilation_cmd)
 
   char *out = 0;
   char *in = 0;
+  bool inp1 = false;
   // PURPOSE: DO THIS IN ONE LOOP "kuriosa to demiso"
-  for (int i = 0; i < arrcount; ++i)
-  {
+  for (int i = 0; i < arrcount; ++i) {
     // Check if the current str is -o and after that it means the output path
-    if (strcmp(strarr[i], "-o") == 0)
-    {
+    if (strcmp(strarr[i], "-o") == 0) {
       i++; // Skip an iteration to output path
       out = strdup(strarr[i]);
     }
-    if (strstr(strarr[i], ".c"))
-    {
-      in = strdup(strarr[i]);
+    if (strstr(strarr[i], ".c")) {
+      if (!inp1) {
+        in = strdup(strarr[i]);
+        inp1 = true;
+      }
     }
   }
 
   bool res;
-  if (!cpm_file_exists(out))
-  {
+  if (!cpm_file_exists(out)) {
     cpm_cmd_exec(compilation_cmd);
     res = true;
-  }
-  else if (cmp_modtime(in, out))
-  {
+  } else if (cmp_modtime(in, out)) {
     cpm_log(CPM_INFO, "recompiling %s => %s\n", in, compilation_cmd.str);
     cpm_cmd_exec(compilation_cmd);
     res = true;
-  }
-  else
-  {
+  } else {
     cpm_log(CPM_INFO, "Skipping compilation of %s\n", in);
     free(compilation_cmd.str);
     res = false;
@@ -491,8 +453,7 @@ bool cpm_compile(Cmd compilation_cmd)
 
   free(in);
   free(out);
-  for (int i = 0; i < arrcap; i++)
-  {
+  for (int i = 0; i < arrcap; i++) {
     free(strarr[i]);
   }
   free(strarr);
@@ -500,18 +461,14 @@ bool cpm_compile(Cmd compilation_cmd)
 }
 
 // RETURNS PID OF CHILD
-int cpm_compile_async(Cmd compile_command)
-{
+int cpm_compile_async(Cmd compile_command) {
   int child = fork();
-  if (child == -1)
-  {
+  if (child == -1) {
     cpm_log(CPM_WARNING, "Could not fork process for async compilation, "
                          "defaulting to non-async compilation\n");
     perror("At fork: ");
     cpm_compile(compile_command);
-  }
-  else if (child == 0)
-  {
+  } else if (child == 0) {
     if (!cpm_compile(compile_command))
       return 0;
     else
@@ -521,32 +478,34 @@ int cpm_compile_async(Cmd compile_command)
 }
 
 // POLLS ASYNC COMPILATION
-void cpm_compile_poll(int compile_index)
-{
+void cpm_compile_poll(int compile_index) {
   int status;
-  if (compile_index != 0)
-  {
+  if (compile_index != 0) {
     if (waitpid(compile_index, &status, 0) == -1)
       cpm_log(CPM_ERROR, "waitpid error\n");
     perror("error at waitpid: ");
-    if (WIFSIGNALED(status))
-    {
+    if (WIFSIGNALED(status)) {
       cpm_log(CPM_ERROR, "Compilation terminated by signal: %d\n",
               WTERMSIG(status));
     }
   }
 }
 
-void cpm_cp(const char *srcpath, const char *destpath)
-{
+void cpm_cp(const char *srcpath, const char *destpath) {
   Cmd cmd = {0};
   cpm_cmd_append(&cmd, "cp", "-r", srcpath, destpath);
   cpm_cmd_exec(cmd);
 }
 
-// Support makefiles and build.c, Arguments are freed when entered, arguments can be NULL
-void cpm_submodule(const char *path_to_folder, Arguments* args)
-{
+void cpm_mv(const char *srcpath, const char *destpath) {
+  Cmd cmd = {0};
+  cpm_cmd_append(&cmd, "mv", srcpath, destpath);
+  cpm_cmd_exec(cmd);
+}
+
+// Support makefiles and build.c, Arguments are freed when entered, arguments
+// can be NULL
+void cpm_submodule(const char *path_to_folder, Arguments *args) {
 
   String makefile = {0};
   cpm_string_append(&makefile, path_to_folder);
@@ -561,8 +520,7 @@ void cpm_submodule(const char *path_to_folder, Arguments* args)
   cpm_string_append(&buildc, "/");
   cpm_string_append(&buildc, "build.c");
 
-  if (cpm_file_exists(buildc.str))
-  {
+  if (cpm_file_exists(buildc.str)) {
     cpm_log(CPM_INFO, "Building submodule %s => build.c\n", path_to_folder);
     cpm_cp("./cpm.h", path_to_folder);
     Cmd cmd = {0};
@@ -577,29 +535,25 @@ void cpm_submodule(const char *path_to_folder, Arguments* args)
     cpm_cmd_append(&run, "./buildscript");
     cpm_log(CPM_INFO, "========================================================"
                       "==========\n\n");
-    if (args != NULL){
-      for(int i=0; i < args->count; i++){
-      cpm_cmd_append(&cmd, args->array[i]->str);
+    if (args != NULL) {
+      for (int i = 0; i < args->count; i++) {
+        cpm_cmd_append(&cmd, args->array[i]->str);
       }
     }
     cpm_cmd_exec(run);
     cpm_string_array_free(*args);
-  }
-  else if (cpm_file_exists(makefile.str) || cpm_file_exists(Makefile.str))
-  {
+  } else if (cpm_file_exists(makefile.str) || cpm_file_exists(Makefile.str)) {
     cpm_log(CPM_INFO, "Building submodule %s => makefile\n", path_to_folder);
     Cmd cmd = {0};
     cpm_cmd_append(&cmd, "cd", path_to_folder, "&&", "make");
-    if (args != NULL){
-      for(int i=0; i < args->count; i++){
-      cpm_cmd_append(&cmd, *args->array[i]->str);
+    if (args != NULL) {
+      for (int i = 0; i < args->count; i++) {
+        cpm_cmd_append(&cmd, args->array[i]->str);
       }
     }
     cpm_cmd_exec(cmd);
     cpm_string_array_free(*args);
-  }
-  else
-  {
+  } else {
     cpm_log(CPM_ERROR, "submodule \"%s\" doesn't have a makefile or build.c\n",
             path_to_folder);
   }
@@ -608,40 +562,33 @@ void cpm_submodule(const char *path_to_folder, Arguments* args)
   string_free(buildc);
 }
 
-void cpm_mkdir(const char *dirpath)
-{
+void cpm_mkdir(const char *dirpath) {
   Cmd cmd = {0};
   cpm_cmd_append(&cmd, "mkdir", "-p", dirpath);
   cpm_cmd_exec(cmd);
 }
-void cpm_rm(const char *path)
-{
+void cpm_rm(const char *path) {
   Cmd cmd = {0};
   cpm_cmd_append(&cmd, "rm", "-rf", path);
   cpm_cmd_exec(cmd);
 }
 
-int cpm_strcmp(const char* str1, const char* str2){
-  return !strcmp(str1,str2);
+int cpm_strcmp(const char *str1, const char *str2) {
+  return !strcmp(str1, str2);
 }
 
-StringArray cpm_dir_glob(const char *dir_path, const char *pattern)
-{
+PathArray cpm_dir_glob(const char *dir_path, const char *pattern) {
   DIR *dir;
   struct dirent *entry;
-  if ((dir = opendir(dir_path)) == NULL)
-  {
+  if ((dir = opendir(dir_path)) == NULL) {
     cpm_log(CPM_ERROR, "Directory globbing failed\n");
     perror("reason:");
   }
   String res = {0};
 
-  while ((entry = readdir(dir)) != NULL)
-  {
-    if (fnmatch(pattern, entry->d_name, 0) == 0)
-    {
-      if (!strcmp(entry->d_name, "build.c"))
-      {
+  while ((entry = readdir(dir)) != NULL) {
+    if (fnmatch(pattern, entry->d_name, 0) == 0) {
+      if (!strcmp(entry->d_name, "build.c")) {
         continue;
       }
       cpm_string_append(&res, dir_path);
@@ -655,16 +602,16 @@ StringArray cpm_dir_glob(const char *dir_path, const char *pattern)
   return trueres;
 }
 
-Arguments cpm_Cargs2cpm_args(int argc, char** argv){
+Arguments cpm_Cargs2cpm_args(int argc, char **argv) {
   Arguments args = {0};
-  for(int i = 0; i < argc; i++){
+  for (int i = 0; i < argc; i++) {
     cpm_string_array_append_cstr(&args, argv[i]);
   }
   return args;
 }
 
-CliCommand cpm_create_cli_command(const char *name, const char *desc, void (*function)())
-{
+CliCommand cpm_create_cli_command(const char *name, const char *desc,
+                                  void (*function)(Arguments)) {
   CliCommand newcmd = {0};
   newcmd.name = name;
   newcmd.desc = desc;
@@ -672,33 +619,30 @@ CliCommand cpm_create_cli_command(const char *name, const char *desc, void (*fun
   return newcmd;
 }
 
-void cpm_append_cli_cmd_arr(CliCommandArray *arr, CliCommand cmd)
-{
-  if (!arr->cmds)
-  {
+void cpm_append_cli_cmd_arr(CliCommandArray *arr, CliCommand cmd) {
+  if (!arr->cmds) {
     arr->cmdcount = 0;
     arr->cmdcap = 5;
     arr->cmds = (CliCommand *)calloc(arr->cmdcap, sizeof(CliCommand));
   }
-  if (arr->cmdcount == arr->cmdcap)
-  {
+  if (arr->cmdcount == arr->cmdcap) {
     arr->cmdcap += 5;
-    arr->cmds = (CliCommand *)realloc(arr->cmds, arr->cmdcap * sizeof(CliCommand));
+    arr->cmds =
+        (CliCommand *)realloc(arr->cmds, arr->cmdcap * sizeof(CliCommand));
   }
   arr->cmds[arr->cmdcount] = cmd;
   arr->cmdcount++;
 }
 
-CliEnv cpm_create_cliEnv_Cargs(int argc, char **argv)
-{
+CliEnv cpm_create_cliEnv_Cargs(int argc, char **argv) {
   Arguments args = cpm_Cargs2cpm_args(argc, argv);
   CliEnv env = {0};
   CliCommandArray arr = {0};
-  env.cmds = arr; 
+  env.cmds = arr;
   env.args = args;
   return env;
 }
-CliEnv cpm_create_cliEnv(Arguments args){
+CliEnv cpm_create_cliEnv(Arguments args) {
   CliEnv env = {0};
   CliCommandArray arr = {0};
   env.cmds = arr;
@@ -706,87 +650,74 @@ CliEnv cpm_create_cliEnv(Arguments args){
   return env;
 }
 
-void cpm_append_env_commands(CliEnv* env, CliCommand cmd){
-    cpm_append_cli_cmd_arr(&env->cmds, cmd);
+void cpm_append_env_commands(CliEnv *env, CliCommand cmd) {
+  cpm_append_cli_cmd_arr(&env->cmds, cmd);
 };
 
-void cpm_free_env(CliEnv env){
+void cpm_free_env(CliEnv env) {
   cpm_string_array_free(env.args);
-    free(env.cmds.cmds);
+  free(env.cmds.cmds);
 }
-void cpm_append_arguments(Arguments* args, const char* cstr){
+void cpm_append_arguments(Arguments *args, const char *cstr) {
   cpm_string_array_append_cstr(args, cstr);
 }
-void cpm_CLI(CliEnv env)
-{
+
+#ifndef CPM_NO_INTERACTIVE
+void cpm_CLI(CliEnv env) {
   char input[31] = {0};
   bool interactive = false;
-  if (env.args.count < 2)
-  {
-    cpm_log(CPM_WARNING, "No initial argument, running in interactive mode...\n");
+  if (env.args.count < 2) {
+
+    cpm_log(CPM_WARNING,
+            "No initial argument, running in interactive mode...\n");
     cpm_log(CPM_MSG, "Entering CLI Mode\nCPM CLI V.1.1\n");
     cpm_log(CPM_MSG, "type \"help\" to print all available commands\n");
     interactive = true;
-    while (interactive)
-    {
+    while (interactive) {
       Arguments interactive_args = {0};
       printf("> ");
       char *res = fgets(input, 30, stdin);
       input[strcspn(input, "\n")] = 0;
-      if (res != NULL)
-      {
+      if (res != NULL) {
         StringArray input_sliced = cpm_str_split_at(input, " ");
         cpm_string_array_append_cstr(&interactive_args, env.args.array[0]->str);
-        for(int i=0; i < input_sliced.count; i++){
+        for (int i = 0; i < input_sliced.count; i++) {
           cpm_string_array_append(&interactive_args, *input_sliced.array[i]);
         }
-        
-        if (!strcmp(input, "help"))
-        {
+
+        if (!strcmp(input, "help")) {
           printf("- help: prints this message\n");
-          for (int i = 0; i < env.cmds.cmdcount; i++)
-          {
+          for (int i = 0; i < env.cmds.cmdcount; i++) {
             printf("- %s: %s\n", env.cmds.cmds[i].name, env.cmds.cmds[i].desc);
           }
           printf("- exit: exit the CLI (CTRL-D)\n");
         }
-        if (!strcmp(input, "exit"))
-        {
+        if (!strcmp(input, "exit")) {
           free(env.cmds.cmds);
           exit(EXIT_SUCCESS);
         }
-        for (int i = 0; i < env.cmds.cmdcount; i++)
-        {
-          if (!strcmp(input_sliced.array[0]->str, env.cmds.cmds[i].name))
-          {
+        for (int i = 0; i < env.cmds.cmdcount; i++) {
+          if (!strcmp(input_sliced.array[0]->str, env.cmds.cmds[i].name)) {
             env.cmds.cmds[i].function(interactive_args); // cmd execution
             cpm_string_array_free(interactive_args);
             cpm_string_array_free(input_sliced);
             break;
           }
         }
-      }
-      else
-      {
+      } else {
         cpm_free_env(env);
         exit(EXIT_SUCCESS);
       }
     }
-  }
-  else
-  {
-    if (!strcmp(env.args.array[1]->str, "help"))
-    {
+  } else {
+    if (!strcmp(env.args.array[1]->str, "help")) {
       printf("- help: prints this message\n");
-      for (int i = 0; i < env.cmds.cmdcount; i++)
-      {
+      for (int i = 0; i < env.cmds.cmdcount; i++) {
         printf("- %s: %s\n", env.cmds.cmds[i].name, env.cmds.cmds[i].desc);
       }
     }
-    for (int i = 0; i < env.cmds.cmdcount; i++)
-    {
-      if (!strcmp(env.args.array[1]->str, env.cmds.cmds[i].name))
-      {
+    for (int i = 0; i < env.cmds.cmdcount; i++) {
+      if (!strcmp(env.args.array[1]->str, env.cmds.cmds[i].name)) {
         env.cmds.cmds[i].function(env.args);
         break;
       }
@@ -794,7 +725,69 @@ void cpm_CLI(CliEnv env)
     cpm_free_env(env);
     exit(EXIT_SUCCESS);
   }
+}
+#else
+void cpm_CLI(CliEnv env) {
+  cpm_log(CPM_WARNING, "Interactive CLI has been desabled by #CPM_NO_CLI, "
+                       "run with help to print available cmds\n");
+
+  if (env.args.count < 2) {
+    exit(1);
+  }
+  if (!strcmp(env.args.array[1]->str, "help")) {
+    printf("- help: prints this message\n");
+    for (int i = 0; i < env.cmds.cmdcount; i++) {
+      printf("- %s: %s\n", env.cmds.cmds[i].name, env.cmds.cmds[i].desc);
+    }
+  }
+  for (int i = 0; i < env.cmds.cmdcount; i++) {
+    if (!strcmp(env.args.array[1]->str, env.cmds.cmds[i].name)) {
+      env.cmds.cmds[i].function(env.args);
+      break;
+    }
+  }
   cpm_free_env(env);
+  exit(EXIT_SUCCESS);
+}
+#endif
+
+String _INTERNAL_cpm_string_from_cstr_fmt(const char *fmt, ...) {
+  va_list arg;
+  va_start(arg, fmt);
+  const char *ars = va_arg(arg, const char *);
+
+  String res = cpm_string_from_cstr("");
+
+  while (ars != NULL) {
+  }
+  va_end(arg);
+  TODO;
+}
+
+#define cpm_string_from_cstr_fmt(cstr, ...)                                    \
+  _INTERNAL_cpm_string_from_cstr_fmt(cstr, __VA_ARGS__, NULL)
+
+Path cpm_path_from_cstr_unchecked(const char *cstr) {
+  Path res = cpm_string_from_cstr(cstr);
+  return res;
+}
+
+Path cpm_path_from_cstr(const char *cstr) {
+  // does have '/' but dont have spaces
+  if (strrchr(cstr, '/') != NULL && strchr(cstr, ' ') == NULL) {
+
+    Path res = cpm_string_from_cstr(cstr);
+    return res;
+  }
+  cpm_log(CPM_ERROR, "Path: %s is an invalid path", cstr);
+  exit(1);
+}
+
+String cpm_path_get_destination(Path *pth) {
+  StringArray split = cpm_str_split_at(pth->str, "/");
+  String end = cpm_string_copy(split.array[split.count]);
+  cpm_string_array_free(split);
+  return end;
 }
 
 #endif
