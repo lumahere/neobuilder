@@ -164,7 +164,7 @@ String cpm_string_from_cstr(const char *cstr) {
   return res;
 }
 
-#define string_free(string) free(string.str);
+#define cpm_string_free(string) free(string.str);
 
 void appendcmdnull(Cmd *cmd, ...) {
   va_list args;
@@ -246,7 +246,7 @@ String cpm_string_copy(String *other) {
 void cpm_string_array_append_cstr(StringArray *sp, const char *cstr) {
   String src = cpm_string_from_cstr(cstr);
   cpm_string_array_append(sp, src);
-  string_free(src);
+  cpm_string_free(src);
 }
 
 void cpm_string_array_free(StringArray str) {
@@ -266,6 +266,40 @@ String cpm_string_array_join(const StringArray *src, const char *delimiter) {
   }
   return dest;
 }
+
+String _INTERNAL_cpm_string_from_cstr_fmt(const char *fmt, ...) {
+  va_list arg;
+  va_start(arg, fmt);
+  char *tmp = (char *)malloc(strlen(fmt) + 1);
+  vsnprintf(tmp, strlen(fmt), fmt, arg);
+  String res = cpm_string_from_cstr(tmp);
+  va_end(arg);
+  free(tmp);
+  return res;
+}
+
+#define cpm_string_from_cstr_fmt(cstr, ...)                                    \
+  _INTERNAL_cpm_string_from_cstr_fmt(cstr, __VA_ARGS__, NULL)
+
+Path cpm_path_from_cstr_unchecked(const char *cstr) {
+  Path res = cpm_string_from_cstr(cstr);
+  return res;
+}
+
+String cpm_path_get_destination(const Path *pth) {
+  StringArray split = cpm_str_split_at(pth->str, "/");
+  String end = cpm_string_from_cstr(split.array[split.count - 1]->str);
+  cpm_string_array_free(split);
+  return end;
+}
+
+void cpm_path_append_cstr(Path *pth, const char *dest) {
+  cpm_string_append(pth, "/");
+  cpm_string_append(pth, dest);
+}
+#define cpm_path_array_new() cpm_string_array_new()
+#define cpm_path_array_append(PathArrayptr, Path)                              \
+  cpm_string_array_append(PathArrayptr, Path)
 
 #define cpm_cmd_append(cmdptr, ...) appendcmdnull(cmdptr, __VA_ARGS__, NULL)
 
@@ -321,7 +355,19 @@ void cpm_log(Loglevel lvl, const char *fmt, ...) {
   vfprintf(stdout, fmt, args);
   va_end(args);
   fprintf(stdout, "%s", KNRM);
-  string_free(msg);
+  cpm_string_free(msg);
+}
+
+
+Path cpm_path_from_cstr(const char *cstr) {
+  // does have '/' but dont have spaces
+  if (strrchr(cstr, '/') != NULL && strchr(cstr, ' ') == NULL) {
+
+    Path res = cpm_string_from_cstr(cstr);
+    return res;
+  }
+  cpm_log(CPM_ERROR, "Path: %s is an invalid path", cstr);
+  exit(1);
 }
 
 void cpm_cmd_exec(Cmd cmd) {
@@ -404,81 +450,18 @@ MemFile cpm_load_file_to_mem(const char *file_path) {
   return file;
 }
 
-// how to parse
-// typical cmd: {compiler} PATH -o PATH {FLAGS}
-// INFO: this command is designed for one file compilation
-// WARNING: DEPRECATED
-bool cpm_compile(Cmd compilation_cmd) {
-
-  cpm_log(CPM_INFO, "%s\n", compilation_cmd.str);
-  size_t arrcap = 5;
-  size_t arrcount = 0;
-  char **strarr = (char **)calloc(arrcap, sizeof(char *));
-  char *srcpy = strdup(compilation_cmd.str);
-  char *token = strtok(srcpy, " ");
-  while (token) {
-    if (arrcount == arrcap) {
-      arrcap *= 2;
-      strarr = (char **)realloc(strarr, arrcap * sizeof(char *));
-    }
-    ++arrcount;
-    strarr[arrcount - 1] = strdup(token);
-    token = strtok(NULL, " ");
-  }
-  free(token);
-  free(srcpy);
-
-  char *out = 0;
-  char *in = 0;
-  bool inp1 = false;
-  // PURPOSE: DO THIS IN ONE LOOP "kuriosa to demiso"
-  for (int i = 0; i < arrcount; ++i) {
-    // Check if the current str is -o and after that it means the output path
-    if (strcmp(strarr[i], "-o") == 0) {
-      i++; // Skip an iteration to output path
-      out = strdup(strarr[i]);
-    }
-    if (strstr(strarr[i], ".c")) {
-      if (!inp1) {
-        in = strdup(strarr[i]);
-        inp1 = true;
-      }
-    }
-  }
-
-  bool res;
-  if (!cpm_file_exists(out)) {
-    cpm_cmd_exec(compilation_cmd);
-    res = true;
-  } else if (cmp_modtime(in, out)) {
-    cpm_log(CPM_INFO, "recompiling %s => %s\n", in, compilation_cmd.str);
-    cpm_cmd_exec(compilation_cmd);
-    res = true;
-  } else {
-    cpm_log(CPM_INFO, "Skipping compilation of %s\n", in);
-    free(compilation_cmd.str);
-    res = false;
-  }
-
-  free(in);
-  free(out);
-  for (int i = 0; i < arrcap; i++) {
-    free(strarr[i]);
-  }
-  free(strarr);
-  return res;
-}
-
-void cpm_compile_d(Cmd *compilation_cmd) {
-  if (strstr(compilation_cmd->str, "cc") == NULL ||
-      strstr(compilation_cmd->str, "gcc") == NULL ||
-      strstr(compilation_cmd->str, "clang") == NULL) {
-    cpm_log(CPM_ERROR, "command %s is not a valid compilation command",
-            compilation_cmd->str);
+void cpm_compile(Cmd compilation_cmd) {
+  
+  if (strstr(compilation_cmd.str, "cc") == NULL) {
+    if (strstr(compilation_cmd.str, "gcc") == NULL) {
+    if (strstr(compilation_cmd.str, "clang") == NULL) {
+    cpm_log(CPM_ERROR, "command: %s is not a valid compilation command\n",
+            compilation_cmd.str);
     exit(EXIT_FAILURE);
   }
-
-  StringArray tokens = cpm_str_split_at(compilation_cmd->str, " ");
+  }
+  } 
+  StringArray tokens = cpm_str_split_at(compilation_cmd.str, " ");
   StringArray srcs = cpm_string_array_new();
   String output = {0};
   // sum1code was here
@@ -487,12 +470,25 @@ void cpm_compile_d(Cmd *compilation_cmd) {
       cpm_string_array_append(&srcs, *tokens.array[i]);
     }
     if (!strcmp(tokens.array[i]->str, "-o")) {
+      cpm_string_append(&output, tokens.array[i+1]->str);
     }
   }
 
+  if(!cpm_file_exists(output.str)){
+      cpm_log(CPM_INFO, "compiling %s => %s\n",srcs.array[0]->str, compilation_cmd.str);
+      cpm_cmd_exec(compilation_cmd);
+      return;
+    }
   for (int i = 0; i < srcs.count; i++) {
+    if(cmp_modtime(srcs.array[i]->str, output.str)){
+      cpm_log(CPM_INFO, "recompiling %s => %s\n",srcs.array[i]->str, compilation_cmd.str);
+      cpm_cmd_exec(compilation_cmd);
+    } else {
+      cpm_log(CPM_INFO, "Skipping compilation: %s\n", compilation_cmd.str);
+      free(compilation_cmd.str);
+      return;
+    }
   }
-
   cpm_string_array_free(tokens);
   cpm_string_array_free(srcs);
 }
@@ -506,9 +502,7 @@ int cpm_compile_async(Cmd compile_command) {
     perror("At fork: ");
     cpm_compile(compile_command);
   } else if (child == 0) {
-    if (!cpm_compile(compile_command))
-      return 0;
-    else
+    cpm_compile(compile_command);
       return child;
   }
   return 0;
@@ -534,6 +528,11 @@ void cpm_cp(const char *srcpath, const char *destpath) {
   cpm_cmd_exec(cmd);
 }
 
+void cpm_rm(const char *path) {
+  Cmd cmd = {0};
+  cpm_cmd_append(&cmd, "rm", "-rf", path);
+  cpm_cmd_exec(cmd);
+}
 void cpm_mv(const char *srcpath, const char *destpath) {
   Cmd cmd = {0};
   cpm_cmd_append(&cmd, "mv", srcpath, destpath);
@@ -547,7 +546,10 @@ void cpm_submodule(const char *path_to_folder, Arguments *args) {
           "========================BEGIN "
           "SUBMODULE %s =============================\n\n",
           path_to_folder);
-
+  Path cpmpath = {0};
+  cpm_path_append_cstr(&cpmpath, path_to_folder);
+  cpm_path_append_cstr(&cpmpath, "cpm.h");
+  printf("%s\n",cpmpath.str);
   String makefile = {0};
   cpm_string_append(&makefile, path_to_folder);
   cpm_string_append(&makefile, "/");
@@ -598,9 +600,11 @@ void cpm_submodule(const char *path_to_folder, Arguments *args) {
     cpm_log(CPM_ERROR, "submodule \"%s\" doesn't have a makefile or build.c\n",
             path_to_folder);
   }
-  string_free(Makefile);
-  string_free(makefile);
-  string_free(buildc);
+  cpm_string_free(Makefile);
+  cpm_string_free(makefile);
+  cpm_string_free(buildc);
+  cpm_rm(cpmpath.str);
+  cpm_string_free(cpmpath);
   cpm_log(
       CPM_INFO,
       "========================END SUBMODULE=============================\n\n");
@@ -611,11 +615,7 @@ void cpm_mkdir(const char *dirpath) {
   cpm_cmd_append(&cmd, "mkdir", "-p", dirpath);
   cpm_cmd_exec(cmd);
 }
-void cpm_rm(const char *path) {
-  Cmd cmd = {0};
-  cpm_cmd_append(&cmd, "rm", "-rf", path);
-  cpm_cmd_exec(cmd);
-}
+
 
 int cpm_strcmp(const char *str1, const char *str2) {
   return !strcmp(str1, str2);
@@ -646,9 +646,9 @@ PathArray cpm_dir_glob(const char *dir_path, const char *pattern) {
   return trueres;
 }
 
-Arguments cpm_Cargs2cpm_args(int argc, char **argv) {
+Arguments _INTERNAL_cpm_Cargs2cpm_args(int argc, char **argv) {
   Arguments args = {0};
-  for (int i = 0; i < argc; i++) {
+  for (int i = 1; i < argc; i++) {
     cpm_string_array_append_cstr(&args, argv[i]);
   }
   return args;
@@ -679,13 +679,14 @@ void cpm_append_cli_cmd_arr(CliCommandArray *arr, CliCommand cmd) {
 }
 
 CliEnv cpm_create_cliEnv_Cargs(int argc, char **argv) {
-  Arguments args = cpm_Cargs2cpm_args(argc, argv);
+  Arguments args = _INTERNAL_cpm_Cargs2cpm_args(argc, argv);
   CliEnv env = {0};
   CliCommandArray arr = {0};
   env.cmds = arr;
   env.args = args;
   return env;
 }
+
 CliEnv cpm_create_cliEnv(Arguments args) {
   CliEnv env = {0};
   CliCommandArray arr = {0};
@@ -775,69 +776,23 @@ void cpm_CLI(CliEnv env) {
   cpm_log(CPM_WARNING, "Interactive CLI has been desabled by #CPM_NO_CLI, "
                        "run with help to print available cmds\n");
 
-  if (env.args.count < 2) {
+  if (env.args.count < 1) {
     exit(1);
   }
-  if (!strcmp(env.args.array[1]->str, "help")) {
+  if (!strcmp(env.args.array[0]->str, "help")) {
     printf("- help: prints this message\n");
     for (int i = 0; i < env.cmds.cmdcount; i++) {
       printf("- %s: %s\n", env.cmds.cmds[i].name, env.cmds.cmds[i].desc);
     }
   }
   for (int i = 0; i < env.cmds.cmdcount; i++) {
-    if (!strcmp(env.args.array[1]->str, env.cmds.cmds[i].name)) {
+    if (!strcmp(env.args.array[0]->str, env.cmds.cmds[i].name)) {
       env.cmds.cmds[i].function(env.args);
       break;
     }
   }
-  cpm_free_env(env);
   exit(EXIT_SUCCESS);
 }
 #endif
-
-String _INTERNAL_cpm_string_from_cstr_fmt(const char *fmt, ...) {
-  va_list arg;
-  va_start(arg, fmt);
-  char *tmp = (char *)malloc(strlen(fmt) + 1);
-  vsnprintf(tmp, strlen(fmt), fmt, arg);
-  String res = cpm_string_from_cstr(tmp);
-  va_end(arg);
-  free(tmp);
-  return res;
-}
-
-#define cpm_string_from_cstr_fmt(cstr, ...)                                    \
-  _INTERNAL_cpm_string_from_cstr_fmt(cstr, __VA_ARGS__, NULL)
-
-Path cpm_path_from_cstr_unchecked(const char *cstr) {
-  Path res = cpm_string_from_cstr(cstr);
-  return res;
-}
-
-Path cpm_path_from_cstr(const char *cstr) {
-  // does have '/' but dont have spaces
-  if (strrchr(cstr, '/') != NULL && strchr(cstr, ' ') == NULL) {
-
-    Path res = cpm_string_from_cstr(cstr);
-    return res;
-  }
-  cpm_log(CPM_ERROR, "Path: %s is an invalid path", cstr);
-  exit(1);
-}
-
-String cpm_path_get_destination(const Path *pth) {
-  StringArray split = cpm_str_split_at(pth->str, "/");
-  String end = cpm_string_from_cstr(split.array[split.count - 1]->str);
-  cpm_string_array_free(split);
-  return end;
-}
-
-void cpm_path_append_cstr(Path *pth, const char *dest) {
-  cpm_string_append(pth, "/");
-  cpm_string_append(pth, dest);
-}
-#define cpm_path_array_new() cpm_string_array_new()
-#define cpm_path_array_append(PathArrayptr, Path)                              \
-  cpm_string_array_append(PathArrayptr, Path)
 
 #endif

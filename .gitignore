@@ -1,6 +1,7 @@
 submod1/
 submod2/
-**/build*
+**/build
+**/buildscript
 example/builds/
 .vscode
 **/a.out

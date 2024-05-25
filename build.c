@@ -1,72 +1,25 @@
-#define CPM_NO_CLI
+#define CPM_NO_INTERACTIVE
 #include "cpm.h"
 
-const char *build_desc =
-    "build the project submodule. available sub: multi-source, basic";
-
-void build(Arguments args) {
-  int submodcnt = 2;
-  const char *submods[] = {"multi-source", "basic"};
-  Arguments pass_args = {0};
-  cpm_append_arguments(&pass_args, "build");
-  if (args.count < 3) {
-    cpm_log(CPM_ERROR, "command: build. missing submodule\nusage: build "
-                       "[submodule]\nsubmodules:\n");
-    for (int i = 0; i < submodcnt; i++) {
-      cpm_log(CPM_MSG, "%s\n", submods[i]);
-    }
+void bld(Arguments args){
+  if(args.count < 2){
+    cpm_log(CPM_ERROR, "no submodule selected\n");
+    cpm_log(CPM_MSG, "available submodules:\n");
+    cpm_log(CPM_MSG, "basic\n");
     return;
+    }
+  if(!strcmp(args.array[1]->str, "basic")){
+    cpm_submodule("./example/basic", NULL);
   } else {
-    for (int i = 0; i < submodcnt; i++) {
-      if (cpm_strcmp(args.array[2]->str, submods[i])) {
-        cpm_append_arguments(&pass_args, submods[i]);
-        cpm_submodule("./example", &pass_args);
-        return;
-      }
-    }
-    cpm_log(CPM_ERROR, "command: build. incorrect submodule\nusage: build "
-                       "[submodule]\nsubmodules:\n");
-    for (int i = 0; i < submodcnt; i++) {
-      cpm_log(CPM_MSG, "%s\n", submods[i]);
-    }
+    cpm_log(CPM_ERROR, "submodule %s does not exist\n", args.array[1]->str);
   }
 }
 
-void run(Arguments args) {
-  int submodcnt = 2;
-  const char *submods[] = {"multi-source", "basic"};
-  Arguments pass_args = {0};
-  cpm_append_arguments(&pass_args, "run");
-  if (args.count < 3) {
-
-    cpm_log(CPM_ERROR, "command: run. missing submodule\nusage: run "
-                       "[submodule]\nsubmodules:\n");
-    for (int i = 0; i < submodcnt; i++) {
-      cpm_log(CPM_MSG, "%s\n", submods[i]);
-    }
-    return;
-  } else {
-    for (int i = 0; i < submodcnt; i++) {
-      if (cpm_strcmp(args.array[2]->str, submods[i])) {
-        cpm_append_arguments(&pass_args, submods[i]);
-        cpm_submodule("./example", &pass_args);
-        return;
-      }
-    }
-    cpm_log(CPM_ERROR, "command: run. incorrect submodule\nusage: run "
-                       "[submodule]\nsubmodules:\n");
-    for (int i = 0; i < submodcnt; i++) {
-      cpm_log(CPM_MSG, "%s\n", submods[i]);
-    }
-  }
-}
-
-int main(int argc, char **argv) {
-  CPM_REBUILD_SELF(argv)
-  CliCommand bld = cpm_create_cli_command("build", build_desc, &build);
-  CliEnv env = cpm_create_cliEnv_Cargs(argc, argv);
-  cpm_append_env_commands(&env, bld);
-  cpm_CLI(env);
-
-  return 0;
+CliCommand build = {.desc = "builds the project", .name="build", .function=bld};
+int main(int argc, char** argv){
+  CPM_REBUILD_SELF(argv);
+  CliEnv clienv = cpm_create_cliEnv_Cargs(argc, argv);
+  cpm_append_env_commands(&clienv, build);
+  cpm_CLI(clienv);
+  cpm_free_env(clienv);
 }
