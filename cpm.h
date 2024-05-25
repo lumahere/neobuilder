@@ -546,8 +546,7 @@ void cpm_submodule(const char *path_to_folder, Arguments *args) {
           "========================BEGIN "
           "SUBMODULE %s =============================\n\n",
           path_to_folder);
-  Path cpmpath = {0};
-  cpm_path_append_cstr(&cpmpath, path_to_folder);
+  Path cpmpath = cpm_path_from_cstr_unchecked(path_to_folder);
   cpm_path_append_cstr(&cpmpath, "cpm.h");
   printf("%s\n",cpmpath.str);
   String makefile = {0};
