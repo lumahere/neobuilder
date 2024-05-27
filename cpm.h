@@ -723,7 +723,7 @@ void cpm_append_arguments(Arguments *args, const char *cstr) {
 void cpm_CLI(CliEnv env) {
   char input[31] = {0};
   bool interactive = false;
-  if (env.args.count < 2) {
+  if (env.args.count < 1) {
     cpm_log(CPM_WARNING,
             "No initial argument, running in interactive mode...\n");
     cpm_log(CPM_MSG, "Entering CLI Mode\nCPM CLI V.1.1\n");
@@ -765,14 +765,14 @@ void cpm_CLI(CliEnv env) {
       }
     }
   } else {
-    if (!strcmp(env.args.array[1]->str, "help")) {
+    if (!strcmp(env.args.array[0]->str, "help")) {
       printf("- help: prints this message\n");
       for (int i = 0; i < env.cmds.cmdcount; i++) {
         printf("- %s: %s\n", env.cmds.cmds[i].name, env.cmds.cmds[i].desc);
       }
     }
     for (int i = 0; i < env.cmds.cmdcount; i++) {
-      if (!strcmp(env.args.array[1]->str, env.cmds.cmds[i].name)) {
+      if (!strcmp(env.args.array[0]->str, env.cmds.cmds[i].name)) {
         env.cmds.cmds[i].function(env.args);
         break;
       }
